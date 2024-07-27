@@ -1,12 +1,12 @@
 """Simple example: each rep visits at most one lead per day
 
 usage:
-time pdm run scripts/cp_sat/simple_example.py
+time pdm run scripts/mip/simple_example.py
 """
 
 import numpy as np
 from loguru import logger
-from ortools.sat.python import cp_model
+from ortools.linear_solver import pywraplp
 
 L = 5  # number of leads
 R = 7  # number of reps
@@ -18,7 +18,7 @@ def main():
     np.random.seed(42)
     e = np.random.randint(1, 10, size=(L, R))  # e_ij = expected profit of assigning lead i to rep j
 
-    model = cp_model.CpModel()
+    model = pywraplp.Solver.CreateSolver("SCIP")
 
     logger.info(f"{L=}")
     logger.info(f"{R=}")
@@ -30,7 +30,7 @@ def main():
 
     # x_{ij}
     x = [
-        [model.NewBoolVar(f"x[{i},{j}]") for j in range(R)] for i in range(L)
+        [model.BoolVar(f"x[{i},{j}]") for j in range(R)] for i in range(L)
     ]
 
     # objective
@@ -49,21 +49,20 @@ def main():
         logger.info(f"constraint sum_i x_ij<=1 ({j=}): sum_i x[i,{j}] <= 1")
 
     # solve
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = TIMEOUT_SECONDS
+    model.set_time_limit(TIMEOUT_SECONDS)
     logger.info(f"starting solver with {L=}, {R=}, {TIMEOUT_SECONDS=}")
-    status = solver.Solve(model)
+    status = model.Solve()
 
     # result
-    if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-        logger.info(f"objective value: {solver.ObjectiveValue()=}")
-        logger.info(f"status: {status=}, {solver.StatusName(status)}")
+    if status in [pywraplp.Solver.OPTIMAL]:
+        logger.info(f"objective value: {model.Objective().Value()=}")
+        logger.info(f"status: {status=} (means optimal)")
         for i in range(L):
             for j in range(R):
-                if solver.Value(x[i][j]):
+                if x[i][j].solution_value():
                     logger.info(f"Lead {i} is assigned to Rep {j}")
     else:
-        logger.error("No solution found or time limit reached.")
+        logger.error("No optimal solution found or time limit reached.")
 
 
 if __name__ == "__main__":
